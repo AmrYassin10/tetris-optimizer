@@ -1,325 +1,320 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestValidateTetromino(t *testing.T) {
-	piece := "....\n.##.\n..##\n...."
-
-	got := validateTetromino(piece)
-
-	if !got {
-		t.Errorf("validateTetromino() = %v, want true", got)
-	}
-
-}
-func TestValidateDisconnectedTetromino(t *testing.T) {
-	piece := "#...\n....\n..##\n...#"
-
-	got := validateTetromino(piece)
-
-	if got {
-		t.Errorf("validateTetromino() = %v, want false", got)
-	}
-}
-func TestValidateWrongCellCount(t *testing.T) {
-	piece := "....\n.##.\n...#\n...."
-
-	got := validateTetromino(piece)
-
-	if got {
-		t.Errorf("validateTetromino() = %v, want false", got)
-	}
-
-}
-func TestValidateInvalidCharacter(t *testing.T) {
-	piece := "X...\n##..\n.#..\n...."
-	got := validateTetromino(piece)
-
-	if got {
-		t.Errorf("validateTetromino() = %v, want false", got)
-	}
-
-}
-
-func TestValidateWrongRowWidth(t *testing.T) {
-	piece := "#..\n##..\n.#..\n...."
-	got := validateTetromino(piece)
-
-	if got {
-		t.Errorf("validateTetromino() = %v, want false", got)
-	}
-}
-func TestCanPlaceOnEmptyBoard(t *testing.T) {
-	board := make([][]rune, 4)
-	for i := 0; i < 4; i++ {
-		board[i] = make([]rune, 4)
-		for j := 0; j < 4; j++ {
-			board[i][j] = '.'
-		}
-	}
-	piece := []string{
-		"##..",
-		"##..",
-		"....",
-		"....",
-	}
-	got := canPlace(board, piece, 0, 0)
-	if !got {
-		t.Errorf("canPlace() = %v, want true", got)
-	}
-}
-func TestCanPlaceOnOccupiedCells(t *testing.T) {
-	board := make([][]rune, 4)
-	for i := 0; i < 4; i++ {
-		board[i] = make([]rune, 4)
-		for j := 0; j < 4; j++ {
-			board[i][j] = '.'
-		}
-	}
-	for i := 0; i < 2; i++ {
-		for j := 0; j < 2; j++ {
-			board[i][j] = 'A'
-		}
-	}
-	piece := []string{
-		"##..",
-		"##..",
-		"....",
-		"....",
-	}
-
-	got := canPlace(board, piece, 0, 0)
-	if got {
-		t.Errorf("canPlace() = %v, want false", got)
-	}
-
-}
-func TestCanPlaceOutsideBoard(t *testing.T) {
-	board := make([][]rune, 4)
-	for i := 0; i < 4; i++ {
-		board[i] = make([]rune, 4)
-		for j := 0; j < 4; j++ {
-			board[i][j] = '.'
-		}
-	}
-	piece := []string{
-		"##..",
-		"##..",
-		"....",
-		"....",
-	}
-	got := canPlace(board, piece, 3, 3)
-	if got {
-		t.Errorf("canPlace() = %v, want false", got)
-	}
-
-}
-func TestSolveSingleTetromino(t *testing.T) {
-	board := make([][]rune, 2)
-	for i := 0; i < 2; i++ {
-		board[i] = make([]rune, 2)
-		for j := 0; j < 2; j++ {
-			board[i][j] = '.'
-		}
-	}
-	pieces := [][]string{
-		{
-			"##..",
-			"##..",
-			"....",
-			"....",
-		},
-	}
-	got := solve(board, pieces, 0)
-	if !got {
-		t.Errorf("solve()=%v,want true", got)
-	}
-	for i := 0; i < 2; i++ {
-		for j := 0; j < 2; j++ {
-
-			if board[i][j] != 'A' {
-				t.Errorf("board[%d][%d] = %c, want A",
-					i,
-					j,
-					board[i][j])
-
-			}
-
-		}
-	}
-}
-
-// Creates an empty square board filled with dots.
-func createEmptyBoard(size int) [][]rune {
+func createTestBoard(size int) [][]rune {
 	board := make([][]rune, size)
-
-	for i := 0; i < size; i++ {
-		board[i] = make([]rune, size)
-
-		for j := 0; j < size; j++ {
-			board[i][j] = '.'
+	for row := range board {
+		board[row] = make([]rune, size)
+		for col := range board[row] {
+			board[row][col] = '.'
 		}
 	}
-
 	return board
 }
 
-// Tests a tetromino with fewer than four rows.
-func TestValidateWrongRowCount(t *testing.T) {
-	piece := "....\n.##.\n..##"
+func TestValidateTetrominoValidSquare(t *testing.T) {
+	input := "....\n.##.\n.##.\n...."
 
-	if validateTetromino(piece) {
-		t.Error("validateTetromino() = true, want false for three rows")
+	piece, valid := validateTetromino(input)
+
+	if !valid {
+		t.Fatal("expected a valid tetromino")
+	}
+
+	if len(piece.Cells) != 4 {
+		t.Fatalf("expected 4 occupied cells, got %d", len(piece.Cells))
+	}
+
+	if piece.Height != 2 || piece.Width != 2 {
+		t.Fatalf(
+			"expected trimmed dimensions 2x2, got %dx%d",
+			piece.Height,
+			piece.Width,
+		)
+	}
+
+	expected := []Cell{
+		{Row: 0, Col: 0},
+		{Row: 0, Col: 1},
+		{Row: 1, Col: 0},
+		{Row: 1, Col: 1},
+	}
+
+	for i, cell := range expected {
+		if piece.Cells[i] != cell {
+			t.Errorf("cell %d: expected %+v, got %+v", i, cell, piece.Cells[i])
+		}
 	}
 }
 
-// Tests a tetromino containing more than four occupied cells.
-func TestValidateTooManyCells(t *testing.T) {
-	piece := "##..\n##..\n#...\n...."
+func TestValidateTetrominoVerticalLine(t *testing.T) {
+	input := "#...\n#...\n#...\n#..."
 
-	if validateTetromino(piece) {
-		t.Error("validateTetromino() = true, want false for five occupied cells")
+	piece, valid := validateTetromino(input)
+
+	if !valid {
+		t.Fatal("expected a valid vertical line")
+	}
+
+	if piece.Height != 4 || piece.Width != 1 {
+		t.Fatalf(
+			"expected dimensions 4x1, got %dx%d",
+			piece.Height,
+			piece.Width,
+		)
 	}
 }
 
-// Tests a valid L-shaped tetromino.
-func TestValidateLTetromino(t *testing.T) {
-	piece := "#...\n#...\n##..\n...."
+func TestValidateTetrominoWrongRowCount(t *testing.T) {
+	input := "....\n.##.\n.##."
 
-	if !validateTetromino(piece) {
-		t.Error("validateTetromino() = false, want true for valid L tetromino")
+	_, valid := validateTetromino(input)
+
+	if valid {
+		t.Fatal("expected invalid tetromino with only 3 rows")
 	}
 }
 
-// Tests a valid square tetromino.
-func TestValidateSquareTetromino(t *testing.T) {
-	piece := "##..\n##..\n....\n...."
+func TestValidateTetrominoWrongRowWidth(t *testing.T) {
+	input := "....\n.##.\n.##.\n..."
 
-	if !validateTetromino(piece) {
-		t.Error("validateTetromino() = false, want true for square tetromino")
+	_, valid := validateTetromino(input)
+
+	if valid {
+		t.Fatal("expected invalid tetromino with a row of incorrect width")
 	}
 }
 
-// Tests placing a piece on the board.
+func TestValidateTetrominoWrongCellCount(t *testing.T) {
+	input := "....\n.##.\n.#..\n...."
+
+	_, valid := validateTetromino(input)
+
+	if valid {
+		t.Fatal("expected invalid tetromino with only 3 occupied cells")
+	}
+}
+
+func TestValidateTetrominoInvalidCharacter(t *testing.T) {
+	input := "....\n.##.\n.##.\n...X"
+
+	_, valid := validateTetromino(input)
+
+	if valid {
+		t.Fatal("expected invalid character to be rejected")
+	}
+}
+
+func TestValidateTetrominoDisconnected(t *testing.T) {
+	input := "#..#\n....\n....\n...."
+
+	_, valid := validateTetromino(input)
+
+	if valid {
+		t.Fatal("expected disconnected cells to be rejected")
+	}
+}
+
+func TestValidateTetrominoLShape(t *testing.T) {
+	input := "#...\n#...\n##..\n...."
+
+	piece, valid := validateTetromino(input)
+
+	if !valid {
+		t.Fatal("expected valid L-shaped tetromino")
+	}
+
+	if len(piece.Cells) != 4 {
+		t.Fatalf("expected 4 cells, got %d", len(piece.Cells))
+	}
+
+	if piece.Height != 3 || piece.Width != 2 {
+		t.Fatalf(
+			"expected dimensions 3x2, got %dx%d",
+			piece.Height,
+			piece.Width,
+		)
+	}
+}
+
+func TestCanPlaceOnEmptyBoard(t *testing.T) {
+	piece, valid := validateTetromino("....\n.##.\n.##.\n....")
+	if !valid {
+		t.Fatal("test piece should be valid")
+	}
+
+	board := createTestBoard(4)
+
+	if !canPlace(board, piece, 0, 0) {
+		t.Fatal("expected square to fit on empty board")
+	}
+}
+
+func TestCanPlaceOnOccupiedCells(t *testing.T) {
+	piece, valid := validateTetromino("....\n.##.\n.##.\n....")
+	if !valid {
+		t.Fatal("test piece should be valid")
+	}
+
+	board := createTestBoard(4)
+	board[0][0] = 'A'
+
+	if canPlace(board, piece, 0, 0) {
+		t.Fatal("expected placement to fail due to occupied cell")
+	}
+}
+
+func TestCanPlaceOutsideBoard(t *testing.T) {
+	piece, valid := validateTetromino("#...\n#...\n#...\n#...")
+	if !valid {
+		t.Fatal("test piece should be valid")
+	}
+
+	board := createTestBoard(3)
+
+	if canPlace(board, piece, 0, 0) {
+		t.Fatal("expected vertical piece not to fit on a 3x3 board")
+	}
+}
+
 func TestPlacePiece(t *testing.T) {
-	board := createEmptyBoard(4)
-	piece := []string{
-		"##..",
-		"##..",
-		"....",
-		"....",
+	piece, valid := validateTetromino("....\n.##.\n.##.\n....")
+	if !valid {
+		t.Fatal("test piece should be valid")
 	}
 
-	placePiece(board, piece, 0, 0, 'A')
+	board := createTestBoard(4)
 
-	for i := 0; i < 2; i++ {
-		for j := 0; j < 2; j++ {
-			if board[i][j] != 'A' {
-				t.Errorf("board[%d][%d] = %c, want A", i, j, board[i][j])
-			}
+	placePiece(board, piece, 1, 1, 'A')
+
+	expected := []Cell{
+		{Row: 1, Col: 1},
+		{Row: 1, Col: 2},
+		{Row: 2, Col: 1},
+		{Row: 2, Col: 2},
+	}
+
+	for _, cell := range expected {
+		if board[cell.Row][cell.Col] != 'A' {
+			t.Errorf(
+				"expected A at (%d,%d)",
+				cell.Row,
+				cell.Col,
+			)
 		}
 	}
 }
 
-// Tests removing a piece from the board.
 func TestRemovePiece(t *testing.T) {
-	board := createEmptyBoard(4)
-	piece := []string{
-		"##..",
-		"##..",
-		"....",
-		"....",
+	piece, valid := validateTetromino("....\n.##.\n.##.\n....")
+	if !valid {
+		t.Fatal("test piece should be valid")
 	}
 
-	placePiece(board, piece, 0, 0, 'A')
-	removePiece(board, piece, 0, 0)
+	board := createTestBoard(4)
+	placePiece(board, piece, 1, 1, 'A')
+	removePiece(board, piece, 1, 1)
 
-	for i := 0; i < 2; i++ {
-		for j := 0; j < 2; j++ {
-			if board[i][j] != '.' {
-				t.Errorf("board[%d][%d] = %c, want .", i, j, board[i][j])
-			}
+	for _, cell := range piece.Cells {
+		if board[1+cell.Row][1+cell.Col] != '.' {
+			t.Errorf(
+				"expected empty cell at (%d,%d) after removal",
+				1+cell.Row,
+				1+cell.Col,
+			)
 		}
 	}
 }
 
-// Tests solving with two square tetrominoes.
+func TestSolveSingleTetromino(t *testing.T) {
+	piece, valid := validateTetromino("#...\n#...\n#...\n#...")
+	if !valid {
+		t.Fatal("test piece should be valid")
+	}
+
+	board := createTestBoard(4)
+
+	if !solve(board, []Piece{piece}, 0) {
+		t.Fatal("expected solver to place one tetromino")
+	}
+
+	count := 0
+	for _, row := range board {
+		for _, cell := range row {
+			if cell == 'A' {
+				count++
+			}
+		}
+	}
+
+	if count != 4 {
+		t.Fatalf("expected 4 cells labelled A, got %d", count)
+	}
+}
+
 func TestSolveTwoTetrominoes(t *testing.T) {
-	board := createEmptyBoard(4)
-
-	pieces := [][]string{
-		{
-			"##..",
-			"##..",
-			"....",
-			"....",
-		},
-		{
-			"##..",
-			"##..",
-			"....",
-			"....",
-		},
+	pieceA, valid := validateTetromino("#...\n#...\n#...\n#...")
+	if !valid {
+		t.Fatal("first test piece should be valid")
 	}
 
-	if !solve(board, pieces, 0) {
-		t.Fatal("solve() = false, want true for two tetrominoes")
+	pieceB, valid := validateTetromino("....\n.##.\n.##.\n....")
+	if !valid {
+		t.Fatal("second test piece should be valid")
 	}
 
-	labels := make(map[rune]int)
-	for i := range board {
-		for j := range board[i] {
-			if board[i][j] != '.' {
-				labels[board[i][j]]++
+	board := createTestBoard(4)
+
+	if !solve(board, []Piece{pieceA, pieceB}, 0) {
+		t.Fatal("expected solver to place both tetrominoes")
+	}
+
+	countA, countB := 0, 0
+
+	for _, row := range board {
+		for _, cell := range row {
+			switch cell {
+			case 'A':
+				countA++
+			case 'B':
+				countB++
 			}
 		}
 	}
 
-	if labels['A'] != 4 {
-		t.Errorf("piece A occupies %d cells, want 4", labels['A'])
+	if countA != 4 {
+		t.Errorf("expected 4 cells labelled A, got %d", countA)
 	}
-	if labels['B'] != 4 {
-		t.Errorf("piece B occupies %d cells, want 4", labels['B'])
+
+	if countB != 4 {
+		t.Errorf("expected 4 cells labelled B, got %d", countB)
 	}
 }
 
-// Tests that the solver can assemble two straight tetrominoes
-// in a 5x5 board, where a 4x4 board cannot fit them.
-func TestSolveMinimumBoardForTwoStraightPieces(t *testing.T) {
-	pieces := [][]string{
-		{
-			"#...",
-			"#...",
-			"#...",
-			"#...",
-		},
-		{
-			"####",
-			"....",
-			"....",
-			"....",
-		},
+func TestSolveCannotFit(t *testing.T) {
+	piece, valid := validateTetromino("#...\n#...\n#...\n#...")
+	if !valid {
+		t.Fatal("test piece should be valid")
 	}
 
-	board := createEmptyBoard(5)
+	board := createTestBoard(3)
 
-	if !solve(board, pieces, 0) {
-		t.Fatal("solve() = false, want true on a 5x5 board")
-	}
-
-	labels := make(map[rune]int)
-	for i := range board {
-		for j := range board[i] {
-			if board[i][j] != '.' {
-				labels[board[i][j]]++
-			}
-		}
-	}
-
-	if labels['A'] != 4 {
-		t.Errorf("piece A occupies %d cells, want 4", labels['A'])
-	}
-	if labels['B'] != 4 {
-		t.Errorf("piece B occupies %d cells, want 4", labels['B'])
+	if solve(board, []Piece{piece}, 0) {
+		t.Fatal("expected solver to fail on a 3x3 board")
 	}
 }
+
+func TestValidateTetrominoRejectsExtraInput(t *testing.T) {
+	input := strings.Repeat("#", 5)
+
+	_, valid := validateTetromino(input)
+
+	if valid {
+		t.Fatal("expected malformed input to be rejected")
+	}
+}
+

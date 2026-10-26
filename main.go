@@ -6,194 +6,249 @@ import (
 	"strings"
 )
 
+type Cell struct {
+	Row int
+	Col int
+}
+
+type Piece struct {
+	Cells  []Cell
+	Height int
+	Width  int
+}
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Println("ERROR")
 		return
 	}
+
 	file, err := os.ReadFile(os.Args[1])
 	if err != nil {
 		fmt.Println("ERROR")
 		return
 	}
-	data := string(file)
-	data = strings.ReplaceAll(data, "\r\n", "\n")
-	data = strings.TrimSuffix(data, "\n")
-	parts := strings.Split(data, "\n\n")
 
-	var pieces [][]string
+	data := strings.ReplaceAll(string(file), "\r\n", "\n")
+	data = strings.TrimSuffix(data, "\n")
+
+	parts := strings.Split(data, "\n\n")
+	pieces := make([]Piece, 0, len(parts))
 
 	for _, part := range parts {
-		if !validateTetromino(part) {
+		piece, valid := validateTetromino(part)
+		if !valid {
 			fmt.Println("ERROR")
 			return
 		}
-		rows := strings.Split(part, "\n")
-		pieces = append(pieces, rows)
-
+		pieces = append(pieces, piece)
 	}
+
 	size := 2
 	for size*size < len(pieces)*4 {
 		size++
 	}
-	for {
 
+	for {
 		board := make([][]rune, size)
-		for i := 0; i < size; i++ {
-			board[i] = make([]rune, size)
-			for j := 0; j < size; j++ {
-				board[i][j] = '.'
+		for row := range board {
+			board[row] = make([]rune, size)
+			for col := range board[row] {
+				board[row][col] = '.'
 			}
 		}
+
 		if solve(board, pieces, 0) {
-			for i := 0; i < size; i++ {
-				fmt.Println(string(board[i]))
+			for _, row := range board {
+				fmt.Println(string(row))
 			}
 			return
 		}
+
 		size++
 	}
 }
-func validateTetromino(piece string) bool {
-	rows := strings.Split(piece, "\n")
+
+func validateTetromino(input string) (Piece, bool) {
+	var empty Piece
+
+	rows := strings.Split(input, "\n")
 	if len(rows) != 4 {
-		return false
+		return empty, false
 	}
+
 	for _, row := range rows {
 		if len(row) != 4 {
-			return false
+			return empty, false
 		}
 	}
-	counter := 0
-	for _, row := range rows {
-		for _, char := range row {
-			if char == '#' {
-				counter++
-			}
-			if char != '#' && char != '.' {
-				return false
-			}
 
-		}
-	}
-	if counter != 4 {
-		return false
-	}
-	startRow := -1
-	startCol := -1
-	directions := [][]int{
-		{-1, 0}, // up
-		{1, 0},  // down
-		{0, -1}, // left
-		{0, 1},  // right
-	}
-	visited := make([][]bool, 4)
+	var cells []Cell
+	minRow, minCol := 4, 4
+	maxRow, maxCol := -1, -1
 
-	for i := range visited {
-		visited[i] = make([]bool, 4)
-	}
-outer:
 	for rowIndex, row := range rows {
-		for colIndex, ch := range row {
+		for colIndex := 0; colIndex < len(row); colIndex++ {
+			ch := row[colIndex]
+
+			if ch != '#' && ch != '.' {
+				return empty, false
+			}
+
 			if ch == '#' {
-				startRow = rowIndex
-				startCol = colIndex
-				break outer
+				cells = append(cells, Cell{
+					Row: rowIndex,
+					Col: colIndex,
+				})
+
+				if rowIndex < minRow {
+					minRow = rowIndex
+				}
+				if rowIndex > maxRow {
+					maxRow = rowIndex
+				}
+				if colIndex < minCol {
+					minCol = colIndex
+				}
+				if colIndex > maxCol {
+					maxCol = colIndex
+				}
 			}
 		}
 	}
-	queue := [][2]int{{startRow, startCol}}
 
-	visited[startRow][startCol] = true
+	if len(cells) != 4 {
+		return empty, false
+	}
+
+	if !isConnected(rows, cells[0]) {
+		return empty, false
+	}
+
+	// Remove empty borders by shifting occupied coordinates.
+	for i := range cells {
+		cells[i].Row -= minRow
+		cells[i].Col -= minCol
+	}
+
+	return Piece{
+		Cells:  cells,
+		Height: maxRow - minRow + 1,
+		Width:  maxCol - minCol + 1,
+	}, true
+}
+
+func isConnected(rows []string, start Cell) bool {
+	var visited [4][4]bool
+	queue := []Cell{start}
+	visited[start.Row][start.Col] = true
+
+	directions := [4]Cell{
+		{Row: -1, Col: 0},
+		{Row: 1, Col: 0},
+		{Row: 0, Col: -1},
+		{Row: 0, Col: 1},
+	}
+
+	connected := 0
 
 	for len(queue) > 0 {
 		current := queue[0]
 		queue = queue[1:]
-		row := current[0]
-		col := current[1]
+		connected++
+
 		for _, direction := range directions {
-			newRow := row + direction[0]
-			newCol := col + direction[1]
-			if newRow < 0 || newRow > 3 || newCol < 0 || newCol > 3 {
+			newRow := current.Row + direction.Row
+			newCol := current.Col + direction.Col
+
+			if newRow < 0 || newRow >= 4 ||
+				newCol < 0 || newCol >= 4 {
 				continue
 			}
-			if rows[newRow][newCol] == '#' && !visited[newRow][newCol] {
-				visited[newRow][newCol] = true
-				queue = append(queue, [2]int{newRow, newCol})
-			}
-		}
-	}
-	connected := 0
-	for rowIndex, row := range rows {
-		for colIndex, ch := range row {
-			if ch == '#' && visited[rowIndex][colIndex] {
 
-				connected++
+			if rows[newRow][newCol] != '#' ||
+				visited[newRow][newCol] {
+				continue
 			}
+
+			visited[newRow][newCol] = true
+			queue = append(queue, Cell{
+				Row: newRow,
+				Col: newCol,
+			})
 		}
 	}
+
 	return connected == 4
-
 }
-func canPlace(board [][]rune, piece []string, placementRow, placementCol int) bool {
-	size := len(board)
-	for rowIndex, row := range piece {
-		for colIndex, ch := range row {
-			if ch == '#' {
-				boardRow := placementRow + rowIndex
-				boardCol := placementCol + colIndex
-				if boardRow < 0 || boardRow >= size ||
-					boardCol < 0 || boardCol >= size {
-					return false
-				}
-				if board[boardRow][boardCol] != '.' {
-					return false
-				}
 
-			}
+func canPlace(
+	board [][]rune,
+	piece Piece,
+	placementRow, placementCol int,
+) bool {
+	size := len(board)
+
+	if placementRow+piece.Height > size ||
+		placementCol+piece.Width > size {
+		return false
+	}
+
+	for _, cell := range piece.Cells {
+		boardRow := placementRow + cell.Row
+		boardCol := placementCol + cell.Col
+
+		if board[boardRow][boardCol] != '.' {
+			return false
 		}
 	}
+
 	return true
 }
-func placePiece(board [][]rune, piece []string, placementRow, placementCol int, label rune) {
-	for rowIndex, row := range piece {
-		for colIndex, ch := range row {
-			if ch == '#' {
-				boardRow := placementRow + rowIndex
-				boardCol := placementCol + colIndex
-				board[boardRow][boardCol] = label
-			}
-		}
+
+func placePiece(
+	board [][]rune,
+	piece Piece,
+	placementRow, placementCol int,
+	label rune,
+) {
+	for _, cell := range piece.Cells {
+		board[placementRow+cell.Row][placementCol+cell.Col] = label
 	}
 }
-func removePiece(board [][]rune, piece []string, placementRow, placementCol int) {
-	for rowIndex, row := range piece {
-		for colIndex, ch := range row {
-			if ch == '#' {
-				boardRow := placementRow + rowIndex
-				boardCol := placementCol + colIndex
-				board[boardRow][boardCol] = '.'
-			}
-		}
+
+func removePiece(
+	board [][]rune,
+	piece Piece,
+	placementRow, placementCol int,
+) {
+	for _, cell := range piece.Cells {
+		board[placementRow+cell.Row][placementCol+cell.Col] = '.'
 	}
 }
-func solve(board [][]rune, pieces [][]string, pieceIndex int) bool {
-	size := len(board)
+
+func solve(board [][]rune, pieces []Piece, pieceIndex int) bool {
 	if pieceIndex == len(pieces) {
 		return true
 	}
+
+	size := len(board)
 	piece := pieces[pieceIndex]
 	label := rune('A' + pieceIndex)
 
-	for row := 0; row < size; row++ {
-		for col := 0; col < size; col++ {
-			if canPlace(board, piece, row, col) {
-				placePiece(board, piece, row, col, label)
-				if solve(board, pieces, pieceIndex+1) {
-					return true
-				}
-				removePiece(board, piece, row, col)
+	for row := 0; row <= size-piece.Height; row++ {
+		for col := 0; col <= size-piece.Width; col++ {
+			if !canPlace(board, piece, row, col) {
+				continue
 			}
+
+			placePiece(board, piece, row, col, label)
+
+			if solve(board, pieces, pieceIndex+1) {
+				return true
+			}
+
+			removePiece(board, piece, row, col)
 		}
 	}
 
